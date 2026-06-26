@@ -1,4 +1,5 @@
 import os
+import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 from simulation.core.engine import SimulationEngine
@@ -76,9 +77,8 @@ def run_validation():
     
     plt.tight_layout()
     
-    # Save to artifacts
-    output_path = "/Users/namanjaswani/.gemini/antigravity-ide/brain/2ea6d925-08d7-4c95-b18f-1b1225d5a774/scratch/validation_results.png"
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # Save to project root (next to this script's invocation directory)
+    output_path = pathlib.Path("validation_results.png").resolve()
     plt.savefig(output_path, dpi=300)
     print(f"\nValidation chart successfully generated: {output_path}")
     
