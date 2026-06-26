@@ -22,18 +22,17 @@ def calculate_monthly_mortality_prob(
     sex: str,
     energy: float,
     net_worth: float,
+    A_s: Optional[float] = None,
+    B_s: Optional[float] = None,
+    c_val: Optional[float] = None,
 ) -> float:
-    """Gompertz-Makeham Law of Mortality scaled to monthly tick with sex-split and poverty multipliers."""
-    # Actuarial constants from India 2024-2026 data
-    if sex == 'M':
-        A_s = 0.002
-        B_s = 0.00004
-        c_val = 1.095
-    else:
-        # Females have slightly lower background risk and aging constant
-        A_s = 0.001
-        B_s = 0.00003
-        c_val = 1.090
+    """Gompertz-Makeham Law of Mortality scaled to monthly tick with poverty multipliers."""
+    if A_s is None:
+        A_s = 0.002 if sex == 'M' else 0.001
+    if B_s is None:
+        B_s = 0.00004 if sex == 'M' else 0.00003
+    if c_val is None:
+        c_val = 1.095 if sex == 'M' else 1.090
 
     # Poverty/Starvation Multiplier (Multidimensional Poverty Penalty):
     # Severe poverty increases risk by 1.75x (midpoint of 1.5x to 2.0x)
@@ -72,12 +71,19 @@ class Citizen:
         parent_ids: Optional[List[int]] = None,
         religious_affiliation: int = 0,
         religiosity: float = 0.97,
+        location: str = 'Rural',
+        caste: str = 'General',
     ) -> None:
         self.citizen_id: int = citizen_id
         self.age: float = age
         self.baseline_health: float = baseline_health
         self.education_level: float = max(0.0, min(1.0, education_level))
         self.risk_tolerance: float = risk_tolerance
+
+        # New Socio-Economic and Geographic attributes
+        self.location: str = location
+        self.caste: str = caste
+        self.months_unemployed: int = 0
 
         self.health: float = baseline_health
         self.energy: float = 2458.0
@@ -88,6 +94,7 @@ class Citizen:
         self.is_employed: bool = False
         self.employer_id: Optional[str] = None
         self.is_student: bool = False
+        self.is_informal: bool = False
         self.is_dead: bool = False
         self.cause_of_death: Optional[str] = None
 
@@ -114,6 +121,93 @@ class Citizen:
         self.work_experience: int = 0
         self.daily_earnings: float = 0.0
         self.last_monthly_income: float = 0.0
+        self.last_dividend: float = 0.0
+        self.total_dividends_received: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {
+            "citizen_id": self.citizen_id,
+            "age": self.age,
+            "baseline_health": self.baseline_health,
+            "education_level": self.education_level,
+            "risk_tolerance": self.risk_tolerance,
+            "health": self.health,
+            "energy": self.energy,
+            "bank_balance": self.bank_balance,
+            "stress_level": self.stress_level,
+            "debt": self.debt,
+            "is_employed": self.is_employed,
+            "employer_id": self.employer_id,
+            "is_student": self.is_student,
+            "is_informal": self.is_informal,
+            "is_dead": self.is_dead,
+            "cause_of_death": self.cause_of_death,
+            "seir_state": self.seir_state,
+            "infection_days": self.infection_days,
+            "sex": self.sex,
+            "parent_ids": self.parent_ids,
+            "offspring_ids": self.offspring_ids,
+            "is_pregnant": self.is_pregnant,
+            "gestation_months": self.gestation_months,
+            "birth_cooldown": self.birth_cooldown,
+            "religious_affiliation": self.religious_affiliation,
+            "religiosity": self.religiosity,
+            "location": self.location,
+            "caste": self.caste,
+            "months_unemployed": self.months_unemployed,
+            "total_earnings": self.total_earnings,
+            "total_spending": self.total_spending,
+            "work_experience": self.work_experience,
+            "daily_earnings": self.daily_earnings,
+            "last_monthly_income": self.last_monthly_income,
+            "last_dividend": self.last_dividend,
+            "total_dividends_received": self.total_dividends_received,
+            "temp_partner_id": getattr(self, "temp_partner_id", -1),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Citizen":
+        citizen = cls(
+            citizen_id=data["citizen_id"],
+            age=data["age"],
+            baseline_health=data["baseline_health"],
+            education_level=data["education_level"],
+            risk_tolerance=data["risk_tolerance"],
+            bank_balance=data["bank_balance"],
+            sex=data["sex"],
+            parent_ids=data["parent_ids"],
+            religious_affiliation=data["religious_affiliation"],
+            religiosity=data["religiosity"],
+            location=data.get("location", "Rural"),
+            caste=data.get("caste", "General"),
+        )
+        citizen.health = data["health"]
+        citizen.energy = data["energy"]
+        citizen.stress_level = data["stress_level"]
+        citizen.debt = data["debt"]
+        citizen.is_employed = data["is_employed"]
+        citizen.employer_id = data["employer_id"]
+        citizen.is_student = data["is_student"]
+        citizen.is_informal = data["is_informal"]
+        citizen.is_dead = data["is_dead"]
+        citizen.cause_of_death = data["cause_of_death"]
+        citizen.seir_state = data["seir_state"]
+        citizen.infection_days = data["infection_days"]
+        citizen.offspring_ids = data["offspring_ids"]
+        citizen.is_pregnant = data["is_pregnant"]
+        citizen.gestation_months = data["gestation_months"]
+        citizen.birth_cooldown = data["birth_cooldown"]
+        citizen.total_earnings = data["total_earnings"]
+        citizen.total_spending = data["total_spending"]
+        citizen.work_experience = data.get("work_experience", 0)
+        citizen.daily_earnings = data.get("daily_earnings", 0.0)
+        citizen.last_monthly_income = data.get("last_monthly_income", 0.0)
+        citizen.last_dividend = data.get("last_dividend", 0.0)
+        citizen.total_dividends_received = data.get("total_dividends_received", 0.0)
+        citizen.months_unemployed = data.get("months_unemployed", 0)
+        if "temp_partner_id" in data:
+            citizen.temp_partner_id = data["temp_partner_id"]
+        return citizen
 
     @property
     def net_worth(self) -> float:
@@ -122,6 +216,8 @@ class Citizen:
     def tick(self, engine: "SimulationEngine") -> None:
         if self.is_dead:
             return
+
+        was_youth = (self.age) < 18.0
 
         # 1. Biological and Age Updates
         self.age += 1.0 / 12.0
@@ -134,8 +230,11 @@ class Citizen:
         self._update_seir_state()
 
         # Enforce geriatric retirement when turning 65
-        if self.age >= 65.0 and self.is_employed:
-            self.lose_job()
+        if self.age >= 65.0:
+            if self.is_employed:
+                self.lose_job(engine)
+            else:
+                engine.unregister_unemployed(self)
 
         # Infants and Youths are dependents
         if self.age < 18.0:
@@ -143,6 +242,10 @@ class Citizen:
             return
         elif self.is_student:
             self.is_student = False  # Graduate at age 18
+            engine.register_unemployed(self)
+        elif was_youth:
+            # Just turned 18 and wasn't a student
+            engine.register_unemployed(self)
 
         # 3. Financial Debt Mechanics (Adults only)
         self._service_debt(engine)
@@ -156,14 +259,44 @@ class Citizen:
         energy_loss = (50.0 + (15.0 * np.exp(1.0 - self.health / 70.8))) * 24.58
         self.energy = max(0.0, self.energy - energy_loss)
 
+        if self.sex == 'M':
+            A_s = engine.parameters.get("gompertz_A_m", 0.002)
+            B_s = engine.parameters.get("gompertz_B_m", 0.00004)
+            c_val = engine.parameters.get("gompertz_c_m", 1.095)
+        else:
+            A_s = engine.parameters.get("gompertz_A_f", 0.001)
+            B_s = engine.parameters.get("gompertz_B_f", 0.00003)
+            c_val = engine.parameters.get("gompertz_c_f", 1.090)
+
         # Gompertz-Makeham Mortality Calculation (monthly)
-        mortality_prob = calculate_monthly_mortality_prob(self.age, self.sex, self.energy, self.net_worth)
+        mortality_prob = calculate_monthly_mortality_prob(self.age, self.sex, self.energy, self.net_worth, A_s, B_s, c_val)
         
         # Adjust mortality hazard based on health and SEIR state
         if self.health < 20.0:
-            mortality_prob = 1.0 - (1.0 - mortality_prob) ** 5.0  # 5x hazard if health critically low
+            mortality_prob *= 1.5
+
         if self.seir_state == 'I':
-            mortality_prob = 1.0 - (1.0 - mortality_prob) ** 2.5  # 2.5x hazard if infected
+            mortality_prob *= 2.0  # Increased hazard during infection
+            
+        # Migration logic
+        if self.location == "Rural" and not self.is_employed and self.months_unemployed > 6 and 18.0 <= self.age < 65.0:
+            migration_chance = 0.15
+            
+            # Network effects (Chain Migration)
+            has_urban_family = False
+            family_ids = self.parent_ids + self.offspring_ids
+            for fid in family_ids:
+                fam = engine.get_citizen_by_id(fid)
+                if fam and not fam.is_dead and getattr(fam, "location", "Rural") == "Urban":
+                    has_urban_family = True
+                    break
+            
+            if has_urban_family:
+                migration_chance = 0.65  # Massive network boost
+                
+            if np.random.random() < migration_chance:
+                self.location = "Urban"
+                self.months_unemployed = 0
 
         # If geriatric (65+), age decay scales health down
         if self.age >= 65.0:
@@ -185,7 +318,7 @@ class Citizen:
                     cause = "Starvation / Malnutrition"
                 else:
                     cause = "Age-related Biological Decay"
-            self.die(cause)
+            self.die(cause, engine)
             return
 
         # Stress updates
@@ -221,7 +354,7 @@ class Citizen:
         alive_parents = [p for p in parents if p and not p.is_dead]
         
         # 1. Schooling for youths (5-18 yrs)
-        if 5.0 <= self.age < 18.0 and not self.is_student:
+        if 5.0 <= self.age < 18.0:
             school = engine.get_best_available_node("School", self)
             if school:
                 base_tuition = school.price * 10.0  # Monthly scaled tuition
@@ -229,14 +362,20 @@ class Citizen:
                 subsidy_amount = base_tuition * subsidy_rate
                 tuition_paid_by_citizen = base_tuition - subsidy_amount
                 
+                paid = False
                 for parent in alive_parents:
                     if parent.bank_balance >= tuition_paid_by_citizen:
                         parent.bank_balance -= tuition_paid_by_citizen
                         parent.total_spending += tuition_paid_by_citizen
                         self.is_student = True
                         school.receive_revenue(base_tuition, parent)
-                        engine.government_capital -= subsidy_amount
+                        engine._gov_spend(subsidy_amount)
+                        engine.tick_subsidy_outflow += subsidy_amount
+                        paid = True
                         break
+                
+                if not paid:
+                    self.is_student = False
 
         if self.is_student:
             self.education_level = min(1.0, self.education_level + 0.02)
@@ -257,7 +396,17 @@ class Citizen:
                     self.health = min(self.baseline_health, self.health + calculate_diminishing_restoration(2.0, k=20.0, c=1.0))
                     if grocery_store:
                         grocery_store.receive_revenue(base_p_grocery, parent)
-                        engine.government_capital -= subsidy_amount
+                        if not getattr(grocery_store, "is_informal", False):
+                            c_tax = base_p_grocery * engine.policies.get("consumption_tax", 0.0)
+                            grocery_store.capital -= c_tax
+                            engine.receive_tax(c_tax, tax_type="consumption")
+                        
+                        import_leak = base_p_grocery * 0.05
+                        grocery_store.capital -= import_leak
+                        engine.trade_balance -= import_leak
+                        engine.tick_import_leakage += import_leak
+                        engine._gov_spend(subsidy_amount)
+                        engine.tick_subsidy_outflow += subsidy_amount
                     fed = True
                     break
                     
@@ -275,7 +424,17 @@ class Citizen:
                         self.stress_level = min(100.0, self.stress_level + 5.0)
                         if restaurant:
                             restaurant.receive_revenue(base_p_fast, parent)
-                            engine.government_capital -= subsidy_amount
+                            if not getattr(restaurant, "is_informal", False):
+                                c_tax = base_p_fast * engine.policies.get("consumption_tax", 0.0)
+                                restaurant.capital -= c_tax
+                                engine.receive_tax(c_tax, tax_type="consumption")
+                            
+                            import_leak = base_p_fast * 0.05
+                            restaurant.capital -= import_leak
+                            engine.trade_balance -= import_leak
+                            engine.tick_import_leakage += import_leak
+                            engine._gov_spend(subsidy_amount)
+                            engine.tick_subsidy_outflow += subsidy_amount
                         fed = True
                         break
                         
@@ -288,8 +447,8 @@ class Citizen:
             hospital = engine.get_best_available_node("Hospital", self)
             if hospital:
                 base_fee = hospital.price * 3.0
-                subsidy_rate = engine.policies.get("healthcare_subsidy", 0.0)
-                fee = base_fee * (1.0 - subsidy_rate)
+                fixed_subsidy = min(engine.healthcare_subsidy_fixed, base_fee)
+                fee = base_fee - fixed_subsidy
                 has_free_care = engine.policies.get("free_emergency_care", False)
                 actual_fee = 0.0 if has_free_care else fee
                 subsidy_amount = base_fee - actual_fee
@@ -305,7 +464,17 @@ class Citizen:
                             if self.seir_state == 'I' and random.random() < 0.5:
                                 self.seir_state = 'R'
                             hospital.receive_revenue(base_fee, parent)
-                            engine.government_capital -= subsidy_amount
+                            if not getattr(hospital, "is_informal", False):
+                                c_tax = base_fee * engine.policies.get("consumption_tax", 0.0)
+                                hospital.capital -= c_tax
+                                engine.receive_tax(c_tax, tax_type="consumption")
+                            
+                            import_leak = base_fee * 0.05
+                            hospital.capital -= import_leak
+                            engine.trade_balance -= import_leak
+                            engine.tick_import_leakage += import_leak
+                            engine._gov_spend(subsidy_amount)
+                            engine.tick_subsidy_outflow += subsidy_amount
                             treated = True
                             break
                 if not treated:
@@ -324,6 +493,7 @@ class Citizen:
 
             interest = self.debt * (engine.policies.get("interest_rate", 0.098) / 12.0)
             self.debt += interest
+            engine.tick_citizen_debt_interest += interest
             # Monthly EMI is capped at 37.5% (midpoint of 35-40%) of last monthly income for employed borrowers.
             # If unemployed, fallback to standard fraction of bank balance.
             if self.is_employed and self.last_monthly_income > 0.0:
@@ -356,8 +526,8 @@ class Citizen:
         restaurant = engine.get_best_available_node("Restaurant", self)
 
         base_p_grocery = (grocery_store.price if grocery_store else 20.0) * 20.0
-        p_grocery = base_p_grocery * (1.0 + engine.policies.get("grocery_subsidy", 0.0))
-        subsidy_g = base_p_grocery - p_grocery
+        subsidy_g = min(engine.grocery_subsidy_fixed, base_p_grocery)
+        p_grocery = base_p_grocery - subsidy_g
 
         base_p_fast_food = (restaurant.price if restaurant else 10.0) * 20.0
         p_fast_food = base_p_fast_food * (1.0 + engine.policies.get("fast_food_tax", 0.0))
@@ -442,7 +612,17 @@ class Citizen:
         self.energy = min(2458.0, self.energy + 1474.8)
         if store:
             store.receive_revenue(base_price, self)
-            engine.government_capital -= subsidy_amount
+            if not getattr(store, "is_informal", False):
+                c_tax = base_price * engine.policies.get("consumption_tax", 0.0)
+                store.capital -= c_tax
+                engine.receive_tax(c_tax, tax_type="consumption")
+                
+            import_leak = base_price * 0.05
+            store.capital -= import_leak
+            engine.trade_balance -= import_leak
+            engine.tick_import_leakage += import_leak
+            engine._gov_spend(subsidy_amount)
+            engine.tick_subsidy_outflow += subsidy_amount
 
     def _buy_fast_food(self, rest: Optional["EnvironmentNode"], price: float, base_price: float, subsidy_amount: float, engine: "SimulationEngine", deduct_balance: bool = True) -> None:
         if deduct_balance:
@@ -453,15 +633,25 @@ class Citizen:
         self.stress_level = min(100.0, self.stress_level + 5.0)
         if rest:
             rest.receive_revenue(base_price, self)
-            engine.government_capital -= subsidy_amount
+            if not getattr(rest, "is_informal", False):
+                c_tax = base_price * engine.policies.get("consumption_tax", 0.0)
+                rest.capital -= c_tax
+                engine.receive_tax(c_tax, tax_type="consumption")
+            
+            import_leak = base_price * 0.05
+            rest.capital -= import_leak
+            engine.trade_balance -= import_leak
+            engine.tick_import_leakage += import_leak
+            engine._gov_spend(subsidy_amount)
+            engine.tick_subsidy_outflow += subsidy_amount
 
     def _seek_healthcare(self, engine: "SimulationEngine") -> None:
         hospital = engine.get_best_available_node("Hospital", self)
         if not hospital: return
 
         base_fee = hospital.price * 3.0
-        subsidy_rate = engine.policies.get("healthcare_subsidy", 0.0)
-        fee = base_fee * (1.0 - subsidy_rate)
+        fixed_subsidy = min(engine.healthcare_subsidy_fixed, base_fee)
+        fee = base_fee - fixed_subsidy
         has_free_care = engine.policies.get("free_emergency_care", False)
         
         actual_fee = 0.0 if has_free_care else fee
@@ -479,18 +669,34 @@ class Citizen:
             if self.seir_state == 'I' and random.random() < 0.5:
                 self.seir_state = 'R'
             hospital.receive_revenue(base_fee, self)
-            engine.government_capital -= subsidy_amount
+            if not getattr(hospital, "is_informal", False):
+                c_tax = base_fee * engine.policies.get("consumption_tax", 0.0)
+                hospital.capital -= c_tax
+                engine.receive_tax(c_tax, tax_type="consumption")
+                
+            import_leak = base_fee * 0.05
+            hospital.capital -= import_leak
+            engine.trade_balance -= import_leak
+            engine.tick_import_leakage += import_leak
+            engine._gov_spend(subsidy_amount)
+            engine.tick_subsidy_outflow += subsidy_amount
         else:
             self.health = max(0.0, self.health - 10.0)
 
     def _search_for_job(self, engine: "SimulationEngine") -> None:
-        available_workplaces = engine.get_nodes_with_job_openings()
-        if not available_workplaces: return
+        available_workplaces = engine.get_nodes_with_job_openings(self)
+        if not available_workplaces: 
+            self.months_unemployed += 1
+            return
 
         best_wp = max(available_workplaces, key=lambda wp: wp.calculate_wage(self), default=None)
         if best_wp and best_wp.hire_employee(self):
             self.is_employed = True
             self.employer_id = best_wp.node_id
+            self.months_unemployed = 0
+            engine.unregister_unemployed(self)
+        else:
+            self.months_unemployed += 1
 
     def receive_wage(self, amount: float) -> None:
         self.bank_balance += amount
@@ -499,15 +705,23 @@ class Citizen:
         self.work_experience += 1
         self.last_monthly_income = amount
 
-    def lose_job(self) -> None:
+    def lose_job(self, engine: "SimulationEngine") -> None:
+        """Citizen loses job and enters unemployed pool."""
         self.is_employed = False
         self.employer_id = None
+        self.months_unemployed = 0
+        def prospect_value(v: float, lambda_: float = 2.25) -> float:
+            return v if v >= 0 else lambda_ * v
         self.stress_level = min(100.0, self.stress_level + prospect_value(-20.0, lambda_=1.5))
+        if engine and not self.is_dead and 18.0 <= self.age < 65.0 and not self.is_student:
+            engine.register_unemployed(self)
 
-    def die(self, cause: str) -> None:
+    def die(self, cause: str, engine: Optional["SimulationEngine"] = None) -> None:
         self.is_dead = True
         self.cause_of_death = cause
         self.health = 0.0
+        if engine:
+            engine.unregister_unemployed(self)
 
     def __repr__(self) -> str:
         return f"Citizen({self.citizen_id}, Age={self.age:.1f}, SEIR={self.seir_state})"

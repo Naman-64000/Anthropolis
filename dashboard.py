@@ -274,15 +274,18 @@ if st.session_state.get("running", False) and st.session_state.engine is not Non
 
     # Economics tab placeholders
     with tab_econ:
-        econ_m1, econ_m2 = st.columns(2)
+        econ_m1, econ_m2, econ_m3 = st.columns(3)
         metric_inherited = econ_m1.empty()
         metric_escheated = econ_m2.empty()
+        metric_informal = econ_m3.empty()
         
         econ_col1, econ_col2 = st.columns(2)
         with econ_col1:
             chart_wealth_placeholder = st.empty()
         with econ_col2:
             chart_inequality_placeholder = st.empty()
+            
+        chart_informal_placeholder = st.empty()
 
     # Health & Wellbeing tab placeholders
     with tab_health:
@@ -336,15 +339,13 @@ if st.session_state.get("running", False) and st.session_state.engine is not Non
         alive_citizens = [c for c in live_engine.citizens if not c.is_dead]
         infected_count = int(latest.get("seir_infected", 0) * live_engine.pop_scale)
         
-        # Smoothed Population Display to prevent jumpy zeroes
-        growth_rate_monthly = 0.00066 # Approx India 0.8% annual
-        base_pop = pop_size
-        smoothed_pop = base_pop * ((1.0 + growth_rate_monthly) ** tick)
+        # Real Population Display (Alive citizens * pop_scale)
+        real_pop = len(live_engine.citizens) * live_engine.pop_scale
         
         # Get previous tick for delta calculations
         if len(history_df) > 1:
             prev = history_df.iloc[-2].to_dict()
-            diff_pop = smoothed_pop * growth_rate_monthly
+            diff_pop = (latest["population"] - prev["population"]) * live_engine.pop_scale
             diff_gini = latest["gini_coefficient"] - prev["gini_coefficient"]
             diff_unemp = (latest["unemployment_rate"] - prev["unemployment_rate"]) * 100.0
             diff_gov = (latest["government_capital"] - prev["government_capital"]) * live_engine.pop_scale
@@ -357,7 +358,7 @@ if st.session_state.get("running", False) and st.session_state.engine is not Non
             diff_infect = None
 
         # Update Metrics via custom HTML cards
-        metric_pop_placeholder.markdown(render_metric_card("Alive Population", format_large_number(smoothed_pop), diff_pop, is_positive_param=True), unsafe_allow_html=True)
+        metric_pop_placeholder.markdown(render_metric_card("Alive Population", format_large_number(real_pop), diff_pop, is_positive_param=True), unsafe_allow_html=True)
         metric_gini_placeholder.markdown(render_metric_card("Gini Inequality", f"{latest['gini_coefficient']:.4f}", diff_gini, is_positive_param=False), unsafe_allow_html=True)
         metric_unemp_placeholder.markdown(render_metric_card("Unemployment", f"{latest['unemployment_rate']*100:.1f}%", diff_unemp, is_positive_param=False), unsafe_allow_html=True)
         metric_gov_placeholder.markdown(render_metric_card("Gov Treasury", format_large_number(latest['government_capital'] * live_engine.pop_scale, is_currency=True), diff_gov, is_positive_param=True), unsafe_allow_html=True)
@@ -366,7 +367,8 @@ if st.session_state.get("running", False) and st.session_state.engine is not Non
         # Update Economics Tab Metrics & Charts
         metric_inherited.metric("Total Estate Wealth Inherited", format_large_number(latest['total_wealth_inherited'] * live_engine.pop_scale, is_currency=True), help="Total positive wealth transferred to living offspring upon deaths.")
         metric_escheated.metric("Total Estate Wealth Seized (Escheat)", format_large_number(latest['total_wealth_escheated'] * live_engine.pop_scale, is_currency=True), help="Total estate wealth seized by state treasury due to absence of offspring.")
-
+        metric_informal.metric("Informal Sector Employment Share", f"{latest['informal_employment_share']*100:.1f}%", help="Percentage of employed citizens working in the informal/shadow economy.")
+        
         plot_config = {'displayModeBar': False}
 
         fig_wealth = go.Figure()
@@ -383,6 +385,12 @@ if st.session_state.get("running", False) and st.session_state.engine is not Non
         fig_ineq.update_yaxes(title_text="Gini Coefficient", secondary_y=False)
         fig_ineq.update_yaxes(title_text="Capital ($)", secondary_y=True)
         chart_inequality_placeholder.plotly_chart(fig_ineq, width="stretch", key=f"ineq_chart_{tick}", config=plot_config)
+
+        fig_informal = go.Figure()
+        fig_informal.add_trace(go.Scatter(x=history_df["tick"], y=history_df["informal_employment_share"] * 100.0, name="Informal Share (%)", line=dict(color="#FFA500", width=2.5), fill='tozeroy'))
+        fig_informal.update_layout(title="Informal / Shadow Economy Employment Share (%) (Live)", template="plotly_dark", height=300, margin=dict(l=40, r=20, t=40, b=40), xaxis_title="Months")
+        fig_informal.update_yaxes(range=[0, 100])
+        chart_informal_placeholder.plotly_chart(fig_informal, width="stretch", key=f"informal_chart_{tick}", config=plot_config)
 
         # Update Health Tab Metrics & Charts
         metric_dep_ratio.metric("Dependency Ratio", f"{latest['dependency_ratio']:.3f}", help="Dependency Ratio = (Infants + Youths + Geriatrics) / Working-Age population.")
